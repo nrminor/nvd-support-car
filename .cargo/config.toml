@@ -1,5 +1,2 @@
 [build]
 rustflags = []
-
-[env]
-AWS_LC_SYS_NO_ASM = { value = "1", relative = false }

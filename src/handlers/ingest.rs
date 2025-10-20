@@ -4,6 +4,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
 };
+use tokio::sync::mpsc;
 
 use crate::db::DbOperations;
 use crate::middleware::validate_bearer_token;
@@ -19,12 +20,12 @@ pub async fn ingest(
         return e.into_response();
     }
 
-    let records = match IngestService::parse_gzipped_ndjson(body).await {
-        Ok(records) => records,
-        Err(e) => return e.into_response(),
-    };
+    let (tx, rx) = mpsc::channel(1000);
 
-    if let Err(e) = DbOperations::insert_records(&state.db, &records).await {
+    let parser = IngestService::parse_gzipped_ndjson(body, tx);
+    let inserter = DbOperations::batch_insert_from_channel(rx, &state.db);
+
+    if let Err(e) = tokio::try_join!(parser, inserter) {
         return e.into_response();
     }
 

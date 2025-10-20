@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  workflow_dispatch:  # Only run manually via GitHub UI
+  # push:
+  #   branches: [ main ]
+  #   paths:
+  #     - 'src/**'
+  #     - 'tests/**'
+  #     - 'benches/**'
+  #     - 'examples/**'
+  #     - 'Cargo.toml'
+  #     - 'Cargo.lock'
+  #     - '.github/workflows/ci.yml'
+  # pull_request:
+  #   branches: [ main ]
+  #   paths:
+  #     - 'src/**'
+  #     - 'tests/**'
+  #     - 'benches/**'
+  #     - 'examples/**'
+  #     - 'Cargo.toml'
+  #     - 'Cargo.lock'
+  #     - '.github/workflows/ci.yml'
+  workflow_call:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --all-targets
+
+  test:
+    name: Test Suite
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --all
+      
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --all-targets -- -D warnings
+
+  # # Verify documentation builds correctly
+  # doc:
+  #   name: Documentation
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: dtolnay/rust-toolchain@stable
+  #     - uses: Swatinem/rust-cache@v2
+  #     - run: cargo doc --no-deps
+
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --verbose
+      - run: cargo build --release --verbose

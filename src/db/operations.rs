@@ -1,7 +1,11 @@
+use tokio::sync::mpsc;
+
 use crate::error::AppError;
 use crate::models::DummyRecord;
 
 pub struct DbOperations;
+
+const BATCH_SIZE: usize = 1000;
 
 impl DbOperations {
     pub async fn insert_record(
@@ -33,6 +37,28 @@ impl DbOperations {
         for record in records {
             Self::insert_record(db, record).await?;
         }
+        Ok(())
+    }
+
+    pub async fn batch_insert_from_channel(
+        mut rx: mpsc::Receiver<DummyRecord>,
+        db: &sqlx::PgPool,
+    ) -> Result<(), AppError> {
+        let mut batch = Vec::with_capacity(BATCH_SIZE);
+
+        while let Some(record) = rx.recv().await {
+            batch.push(record);
+
+            if batch.len() >= BATCH_SIZE {
+                Self::insert_records(db, &batch).await?;
+                batch.clear();
+            }
+        }
+
+        if !batch.is_empty() {
+            Self::insert_records(db, &batch).await?;
+        }
+
         Ok(())
     }
 }
