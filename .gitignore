@@ -1,0 +1,89 @@
+# =============================================================================
+# REVERSE-LOGIC .gitignore for nvd-support-car
+# =============================================================================
+#
+# This project uses REVERSE LOGIC for .gitignore
+# 1. Everything is ignored by default with /*
+# 2. Specific files and patterns are then explicitly allowed with !
+# 3. This prevents accidentally committing unwanted files
+#
+# To add a new file to version control:
+# - Add an explicit allow rule (!filename or !pattern)
+# - For directories, list each subdirectory and file explicitly
+#
+# =============================================================================
+
+# Ignore everything by default
+/*
+
+# Core Project Files
+!/.gitignore
+!/README.md
+!/LICENSE
+!/Cargo.toml
+!/Cargo.lock
+!/justfile
+!/flake.nix
+!/flake.lock
+!/.envrc
+!/Dockerfile
+!/Cross.toml
+!/rust-toolchain.toml
+
+# Source Code
+!/src/
+!/src/*.rs
+!/src/main.rs
+!/src/config.rs
+!/src/state.rs
+!/src/error.rs
+!/src/preflight.rs
+
+# Models subdirectory
+!/src/models/
+!/src/models/*.rs
+!/src/models/mod.rs
+!/src/models/record.rs
+
+# Services subdirectory
+!/src/services/
+!/src/services/*.rs
+!/src/services/mod.rs
+!/src/services/ingest.rs
+
+# Database subdirectory
+!/src/db/
+!/src/db/*.rs
+!/src/db/mod.rs
+!/src/db/operations.rs
+
+# Middleware subdirectory
+!/src/middleware/
+!/src/middleware/*.rs
+!/src/middleware/mod.rs
+!/src/middleware/bearer_auth.rs
+
+# Handlers subdirectory
+!/src/handlers/
+!/src/handlers/*.rs
+!/src/handlers/mod.rs
+!/src/handlers/health.rs
+!/src/handlers/ingest.rs
+
+# Migrations
+!/migrations/
+!/migrations/*.sql
+
+# Development Configuration
+!/.editorconfig
+!/.rustfmt.toml
+!/rust-analyzer.json
+
+# CI/CD Configuration
+!/.github/
+!/.github/workflows/
+!/.github/workflows/*.yml
+
+# Build and cargo configuration
+!/.cargo/
+!/.cargo/config.toml
