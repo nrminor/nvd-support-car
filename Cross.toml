@@ -1,14 +1,17 @@
 [build]
 pre-build = []
 
+# Use the cross-rs v0.2.5 images (stable)
+# These images are properly maintained and include all necessary dependencies
+
 [target.x86_64-unknown-linux-gnu]
-image = "ghcr.io/cross-rs/cross:x86_64-unknown-linux-gnu-latest"
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-gnu:0.2.5"
 
 [target.x86_64-unknown-linux-musl]
-image = "ghcr.io/cross-rs/cross:x86_64-unknown-linux-musl-latest"
+image = "ghcr.io/cross-rs/x86_64-unknown-linux-musl:0.2.5"
 
 [target.aarch64-unknown-linux-gnu]
-image = "ghcr.io/cross-rs/cross:aarch64-unknown-linux-gnu-latest"
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:0.2.5"
 
 [target.aarch64-unknown-linux-musl]
-image = "ghcr.io/cross-rs/cross:aarch64-unknown-linux-musl-latest"
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-musl:0.2.5"
