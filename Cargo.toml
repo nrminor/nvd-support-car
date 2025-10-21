@@ -2,6 +2,19 @@
 name = "nvd-support-car"
 version = "0.1.0"
 edition = "2024"
+authors = ["Nicholas R. Minor <nrminor@wisc.edu>"]
+description = "a prototype backend service for ingesting metagenomic data from HTCondor nodes"
+documentation = "https://github.com/nrminor/nvd-support-car#readme"
+homepage = "https://github.com/nrminor/nvd-support-car"
+repository = "https://github.com/nrminor/nvd-support-car"
+readme = "README.md"
+license = "MIT"
+keywords = ["bioinformatics", "metagenomics", "nvd", "htcondor"]
+categories = ["science", "web-programming::http-server", "database"]
+
+[package.metadata]
+# Minimum supported Rust version (MSRV)
+msrv = "1.88.0"
 
 [dependencies]
 async-compression = { version = "0.4.32", features = ["gzip", "tokio"] }

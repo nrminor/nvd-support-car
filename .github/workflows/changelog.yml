@@ -1,0 +1,230 @@
+name: Generate Changelog
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to generate changelog for'
+        required: false
+        default: ''
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for all tags
+      
+      - name: Generate Changelog
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v4
+        with:
+          configuration: |
+            {
+              "template": "# Changelog\n\n## What's Changed\n\n#{{CHANGELOG}}\n\n## Contributors\n\n#{{CONTRIBUTORS}}\n\n**Full Changelog**: #{{RELEASE_DIFF}}",
+              "pr_template": "- #{{TITLE}} by @#{{AUTHOR}} in ##{{NUMBER}}",
+              "categories": [
+                {
+                  "title": "## 🚀 Features",
+                  "labels": ["feature", "enhancement", "feat"]
+                },
+                {
+                  "title": "## 🐛 Bug Fixes",
+                  "labels": ["bug", "fix", "bugfix"]
+                },
+                {
+                  "title": "## 🔬 Research & Science",
+                  "labels": ["research", "science", "analysis"]
+                },
+                {
+                  "title": "## 📊 Data Processing",
+                  "labels": ["data", "pipeline", "ingestion"]
+                },
+                {
+                  "title": "## 🧰 Maintenance",
+                  "labels": ["chore", "maintenance", "ci", "refactor"]
+                },
+                {
+                  "title": "## 📚 Documentation",
+                  "labels": ["documentation", "docs"]
+                },
+                {
+                  "title": "## ⬆️ Dependencies",
+                  "labels": ["dependencies", "deps"]
+                },
+                {
+                  "title": "## 🔒 Security",
+                  "labels": ["security"]
+                }
+              ],
+              "sort": {
+                "order": "DESC",
+                "on_property": "mergedAt"
+              },
+              "max_pull_requests": 200,
+              "max_back_track_time_days": 365,
+              "exclude_merge_branches": ["main", "master"],
+              "tag_resolver": {
+                "method": "semver",
+                "filter": {
+                  "pattern": "v(.+)",
+                  "flags": "gu"
+                }
+              }
+            }
+          toTag: ${{ github.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Create/Update CHANGELOG.md
+        run: |
+          # Get the current tag
+          CURRENT_TAG="${{ github.ref_name }}"
+          DATE=$(date +%Y-%m-%d)
+          
+          # Create temporary file with new release notes (clean changelog format)
+          cat > new_release.md << 'EOF'
+          ## [${{ github.ref_name }}] - ${DATE}
+          
+          ${{ steps.changelog.outputs.changelog }}
+          EOF
+          
+          # If CHANGELOG.md exists, append to it; otherwise create it
+          if [ -f CHANGELOG.md ]; then
+            # Check if this version already exists in the changelog
+            if ! grep -q "\[${{ github.ref_name }}\]" CHANGELOG.md; then
+              # Create temp file with header, new release, and rest of changelog
+              {
+                echo "# Changelog"
+                echo ""
+                echo "All notable changes to NVD Support Car will be documented in this file."
+                echo ""
+                echo "The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),"
+                echo "and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)."
+                echo ""
+                cat new_release.md
+                echo ""
+                # Skip the header lines from existing CHANGELOG.md
+                tail -n +7 CHANGELOG.md 2>/dev/null || true
+              } > CHANGELOG.tmp.md
+              mv CHANGELOG.tmp.md CHANGELOG.md
+            fi
+          else
+            # Create new CHANGELOG.md
+            {
+              echo "# Changelog"
+              echo ""
+              echo "All notable changes to NVD Support Car will be documented in this file."
+              echo ""
+              echo "The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),"
+              echo "and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)."
+              echo ""
+              cat new_release.md
+            } > CHANGELOG.md
+          fi
+          
+          rm new_release.md
+      
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: Update CHANGELOG.md for ${{ github.ref_name }}"
+          title: "Update CHANGELOG.md for ${{ github.ref_name }}"
+          body: |
+            This PR updates the CHANGELOG.md file with the changes from release ${{ github.ref_name }}.
+            
+            ## Changes included:
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ---
+            *This PR was automatically generated by the changelog workflow.*
+          branch: changelog-${{ github.ref_name }}
+          delete-branch: true
+          labels: |
+            documentation
+            automated
+      
+      - name: Update GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          body: |
+            ## 📦 Download Binaries
+            
+            **Download the pre-built binary for your platform from the assets below.** No compilation needed!
+            
+            ### Supported Platforms:
+            - 🐧 **Linux x86_64**: `nvd-support-car-x86_64-unknown-linux-musl.tar.gz`
+            - 🐧 **Linux ARM64**: `nvd-support-car-aarch64-unknown-linux-musl.tar.gz`
+            - 🍎 **macOS Intel**: `nvd-support-car-x86_64-apple-darwin.tar.gz`
+            - 🍎 **macOS Apple Silicon**: `nvd-support-car-aarch64-apple-darwin.tar.gz`
+            
+            ### Quick Install
+            
+            #### Option 1: Download and extract binary directly
+            ```bash
+            # Example for Linux x86_64 (adjust URL for your platform)
+            curl -LO https://github.com/nrminor/nvd-support-car/releases/download/${{ github.ref_name }}/nvd-support-car-x86_64-unknown-linux-musl.tar.gz
+            tar -xzf nvd-support-car-x86_64-unknown-linux-musl.tar.gz
+            chmod +x nvd-support-car
+            sudo mv nvd-support-car /usr/local/bin/
+            ```
+            
+            #### Option 2: Automated install script
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/nrminor/nvd-support-car/main/INSTALL.sh | bash
+            ```
+            
+            #### Option 3: Build from source
+            ```bash
+            cargo install --git https://github.com/nrminor/nvd-support-car.git --tag ${{ github.ref_name }}
+            ```
+            
+            ## 🚀 Setup Instructions
+            
+            ### 1. Database Setup
+            ```bash
+            # Create PostgreSQL database
+            psql -U postgres -c 'CREATE DATABASE nvd_support;'
+            
+            # Run migrations (download from repository or releases)
+            psql -U postgres -d nvd_support -f migrations/001_init.sql
+            psql -U postgres -d nvd_support -f migrations/002_gottcha2_full_table.sql
+            psql -U postgres -d nvd_support -f migrations/003_stast_table.sql
+            ```
+            
+            ### 2. Configuration
+            Create a `.env` file or export these environment variables:
+            ```bash
+            export DATABASE_URL="postgresql://user:password@localhost/nvd_support"
+            export BEARER_TOKEN="your-secure-token"
+            export HOST="127.0.0.1"
+            export PORT="8080"
+            ```
+            
+            See [examples/.env.example](https://github.com/nrminor/nvd-support-car/blob/main/examples/.env.example) for all configuration options.
+            
+            ### 3. Run the Server
+            ```bash
+            nvd-support-car
+            ```
+            
+            ## 📋 What's Changed
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ## 📚 Documentation
+            
+            - [Full README](https://github.com/nrminor/nvd-support-car#readme)
+            - [API Documentation](https://github.com/nrminor/nvd-support-car#api)
+            - [Development Guide](https://github.com/nrminor/nvd-support-car#development)
+          token: ${{ secrets.GITHUB_TOKEN }}

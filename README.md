@@ -22,32 +22,96 @@ It does a number of core backend service things, including:
 - The support care also performs idempotent record insertion with conflict
   handling
 
-## Setup
+## Installation
 
-All configuration of the support care is currently managed through environment
-variables, namely the following:
+### Quick Install (Recommended)
+
+Install the latest release using curl:
 
 ```bash
-export DATABASE_URL=postgres://user:password@localhost/dbname
-export INGEST_TOKEN=your-secret-token
-export SERVER_PORT=443
-export CERT_PATH=/path/to/cert.pem
-export KEY_PATH=/path/to/key.pem
+curl -fsSL https://raw.githubusercontent.com/nrminor/nvd-support-car/main/INSTALL.sh | bash
+```
+
+Or with wget:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/nrminor/nvd-support-car/main/INSTALL.sh | bash
+```
+
+The installer will:
+1. Download a pre-built binary for your platform (if available)
+2. Fall back to building from source if no binary is available
+3. Install to `~/.local/bin`
+4. Provide setup instructions for the database and environment
+
+### Install from Source with Cargo
+
+If you prefer to build from source directly:
+
+```bash
+# Install from GitHub repository
+cargo install --git https://github.com/nrminor/nvd-support-car.git
+```
+
+### Database Setup
+
+After installation, set up the PostgreSQL database:
+
+```bash
+# Create database
+psql -U postgres -c 'CREATE DATABASE nvd_support;'
+
+# Run migrations
+psql -U postgres -d nvd_support -f migrations/001_init.sql
+psql -U postgres -d nvd_support -f migrations/002_gottcha2_full_table.sql
+psql -U postgres -d nvd_support -f migrations/003_stast_table.sql
+```
+
+## Configuration
+
+All configuration is managed through environment variables. See [examples/.env.example](examples/.env.example) for a complete template.
+
+```bash
+export DATABASE_URL="postgresql://user:password@localhost/nvd_support"
+export BEARER_TOKEN="your-secret-token"
+export HOST="127.0.0.1"
+export PORT="8080"
+
+# Optional TLS configuration
+export CERT_PATH="/path/to/cert.pem"
+export KEY_PATH="/path/to/key.pem"
 ```
 
 These variables will be read from the shell environment and used to configure
-tha service at launch
+the service at launch.
 
-### Running
+## Running
+
+After installation and configuration:
 
 ```bash
+# If installed to PATH
+nvd-support-car
+
+# Or run directly
+~/.local/bin/nvd-support-car
+
+# For development
 cargo run --release
 ```
 
-### Building for Other Platforms
+## Building for Other Platforms
+
+To build for different platforms:
 
 ```bash
-cross build --target x86_64-unknown-linux-gnu --release
+# Using cross for Linux targets
+cross build --target x86_64-unknown-linux-musl --release
+cross build --target aarch64-unknown-linux-musl --release
+
+# Native builds for macOS
+cargo build --target x86_64-apple-darwin --release
+cargo build --target aarch64-apple-darwin --release
 ```
 
 ## API

@@ -29,6 +29,7 @@
 !/Dockerfile
 !/Cross.toml
 !/rust-toolchain.toml
+!/INSTALL.sh
 
 # Source Code
 !/src/
@@ -97,6 +98,10 @@
 !/tests/integration_test.rs
 !/tests/common/
 !/tests/common/mod.rs
+
+# Examples
+!/examples/
+!/examples/.env.example
 
 # Test data files - NOT included (too large)
 tests/data/
