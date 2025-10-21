@@ -24,83 +24,98 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for all tags
       
-      - name: Generate Changelog
+      - name: Generate Changelog from Commits
         id: changelog
-        uses: mikepenz/release-changelog-builder-action@v4
-        with:
-          configuration: |
-            {
-              "template": "# Changelog\n\n## What's Changed\n\n#{{CHANGELOG}}\n\n## Contributors\n\n#{{CONTRIBUTORS}}\n\n**Full Changelog**: #{{RELEASE_DIFF}}",
-              "pr_template": "- #{{TITLE}} by @#{{AUTHOR}} in ##{{NUMBER}}",
-              "categories": [
-                {
-                  "title": "## 🚀 Features",
-                  "labels": ["feature", "enhancement", "feat"]
-                },
-                {
-                  "title": "## 🐛 Bug Fixes",
-                  "labels": ["bug", "fix", "bugfix"]
-                },
-                {
-                  "title": "## 🔬 Research & Science",
-                  "labels": ["research", "science", "analysis"]
-                },
-                {
-                  "title": "## 📊 Data Processing",
-                  "labels": ["data", "pipeline", "ingestion"]
-                },
-                {
-                  "title": "## 🧰 Maintenance",
-                  "labels": ["chore", "maintenance", "ci", "refactor"]
-                },
-                {
-                  "title": "## 📚 Documentation",
-                  "labels": ["documentation", "docs"]
-                },
-                {
-                  "title": "## ⬆️ Dependencies",
-                  "labels": ["dependencies", "deps"]
-                },
-                {
-                  "title": "## 🔒 Security",
-                  "labels": ["security"]
-                }
-              ],
-              "sort": {
-                "order": "DESC",
-                "on_property": "mergedAt"
-              },
-              "max_pull_requests": 200,
-              "max_back_track_time_days": 365,
-              "exclude_merge_branches": ["main", "master"],
-              "tag_resolver": {
-                "method": "semver",
-                "filter": {
-                  "pattern": "v(.+)",
-                  "flags": "gu"
-                }
-              }
-            }
-          toTag: ${{ github.ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the current tag
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.tag }}" ]; then
+            CURRENT_TAG="${{ github.event.inputs.tag }}"
+          else
+            CURRENT_TAG="${{ github.ref_name }}"
+          fi
+          
+          echo "Generating changelog for $CURRENT_TAG"
+          
+          # Get the previous tag
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${CURRENT_TAG}^ 2>/dev/null || echo "")
+          
+          # Generate changelog content
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "No previous tag found. This is the first release."
+            CHANGELOG="Initial release"
+            COMMITS=$(git log --pretty=format:"- %s (%an)" --no-merges ${CURRENT_TAG})
+          else
+            echo "Previous tag: $PREVIOUS_TAG"
+            # Get commits between tags
+            COMMITS=$(git log --pretty=format:"- %s (%an)" --no-merges ${PREVIOUS_TAG}..${CURRENT_TAG})
+          fi
+          
+          # Group commits by type (conventional commits)
+          FEATURES=$(echo "$COMMITS" | grep -E "^- (feat|feature)" || true)
+          FIXES=$(echo "$COMMITS" | grep -E "^- (fix|bugfix)" || true)
+          DOCS=$(echo "$COMMITS" | grep -E "^- (docs|documentation)" || true)
+          CHORES=$(echo "$COMMITS" | grep -E "^- (chore|ci|build|refactor)" || true)
+          OTHER=$(echo "$COMMITS" | grep -vE "^- (feat|feature|fix|bugfix|docs|documentation|chore|ci|build|refactor)" || true)
+          
+          # Build changelog
+          {
+            echo "CHANGELOG<<EOF"
+            
+            if [ -n "$FEATURES" ]; then
+              echo "## 🚀 Features"
+              echo "$FEATURES"
+              echo ""
+            fi
+            
+            if [ -n "$FIXES" ]; then
+              echo "## 🐛 Bug Fixes"
+              echo "$FIXES"
+              echo ""
+            fi
+            
+            if [ -n "$DOCS" ]; then
+              echo "## 📚 Documentation"
+              echo "$DOCS"
+              echo ""
+            fi
+            
+            if [ -n "$CHORES" ]; then
+              echo "## 🧰 Maintenance"
+              echo "$CHORES"
+              echo ""
+            fi
+            
+            if [ -n "$OTHER" ]; then
+              echo "## Other Changes"
+              echo "$OTHER"
+              echo ""
+            fi
+            
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
       
       - name: Create/Update CHANGELOG.md
         run: |
           # Get the current tag
-          CURRENT_TAG="${{ github.ref_name }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.tag }}" ]; then
+            CURRENT_TAG="${{ github.event.inputs.tag }}"
+          else
+            CURRENT_TAG="${{ github.ref_name }}"
+          fi
+          
           DATE=$(date +%Y-%m-%d)
           
           # Create temporary file with new release notes (clean changelog format)
-          cat > new_release.md << 'EOF'
-          ## [${{ github.ref_name }}] - ${DATE}
-          
-          ${{ steps.changelog.outputs.changelog }}
-          EOF
+          cat > new_release.md << EOF
+## [${CURRENT_TAG}] - ${DATE}
+
+${{ steps.changelog.outputs.CHANGELOG }}
+EOF
           
           # If CHANGELOG.md exists, append to it; otherwise create it
           if [ -f CHANGELOG.md ]; then
             # Check if this version already exists in the changelog
-            if ! grep -q "\[${{ github.ref_name }}\]" CHANGELOG.md; then
+            if ! grep -q "\[${CURRENT_TAG}\]" CHANGELOG.md; then
               # Create temp file with header, new release, and rest of changelog
               {
                 echo "# Changelog"
@@ -116,6 +131,8 @@ jobs:
                 tail -n +7 CHANGELOG.md 2>/dev/null || true
               } > CHANGELOG.tmp.md
               mv CHANGELOG.tmp.md CHANGELOG.md
+            else
+              echo "Version ${CURRENT_TAG} already exists in CHANGELOG.md"
             fi
           else
             # Create new CHANGELOG.md
@@ -131,7 +148,11 @@ jobs:
             } > CHANGELOG.md
           fi
           
-          rm new_release.md
+          rm -f new_release.md
+          
+          # Show the changelog for debugging
+          echo "CHANGELOG.md content:"
+          head -20 CHANGELOG.md
       
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
@@ -143,11 +164,12 @@ jobs:
             This PR updates the CHANGELOG.md file with the changes from release ${{ github.ref_name }}.
             
             ## Changes included:
-            ${{ steps.changelog.outputs.changelog }}
+            ${{ steps.changelog.outputs.CHANGELOG }}
             
             ---
             *This PR was automatically generated by the changelog workflow.*
           branch: changelog-${{ github.ref_name }}
+          base: main
           delete-branch: true
           labels: |
             documentation
@@ -220,7 +242,7 @@ jobs:
             
             ## 📋 What's Changed
             
-            ${{ steps.changelog.outputs.changelog }}
+            ${{ steps.changelog.outputs.CHANGELOG }}
             
             ## 📚 Documentation
             
