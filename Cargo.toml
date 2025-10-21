@@ -36,14 +36,21 @@ lto = true
 codegen-units = 1
 strip = true
 
-# [lints.clippy]
-# all = { level = "warn", priority = -1 }
-# pedantic = { level = "warn", priority = -1 }
-# perf = { level = "warn", priority = -1 }
-# style = { level = "warn", priority = -1 }
-# complexity = { level = "warn", priority = -1 }
-# correctness = { level = "warn", priority = -1 }
-# unwrap_used = "deny"
-# print_stdout = "deny"
-# print_stderr = "deny"
+[dev-dependencies]
+axum-test = "18.1.0"
+flate2 = "1.1.4"
+testcontainers = "0.25.0"
+testcontainers-modules = "0.13.0"
+tokio-test = "0.4.4"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+correctness = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
 

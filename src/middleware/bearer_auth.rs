@@ -3,10 +3,12 @@ use axum::http::HeaderMap;
 use crate::error::AppError;
 use crate::state::AppState;
 
-pub fn validate_bearer_token(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<(), AppError> {
+/// Validates the bearer token from the request headers.
+///
+/// # Errors
+///
+/// Returns `AppError::Unauthorized` if the token is missing or invalid.
+pub fn validate_bearer_token(state: &AppState, headers: &HeaderMap) -> Result<(), AppError> {
     let auth = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())

@@ -2,26 +2,26 @@ name: CI
 
 on:
   workflow_dispatch:  # Only run manually via GitHub UI
-  # push:
-  #   branches: [ main ]
-  #   paths:
-  #     - 'src/**'
-  #     - 'tests/**'
-  #     - 'benches/**'
-  #     - 'examples/**'
-  #     - 'Cargo.toml'
-  #     - 'Cargo.lock'
-  #     - '.github/workflows/ci.yml'
-  # pull_request:
-  #   branches: [ main ]
-  #   paths:
-  #     - 'src/**'
-  #     - 'tests/**'
-  #     - 'benches/**'
-  #     - 'examples/**'
-  #     - 'Cargo.toml'
-  #     - 'Cargo.lock'
-  #     - '.github/workflows/ci.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'benches/**'
+      - 'examples/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'benches/**'
+      - 'examples/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ci.yml'
   workflow_call:
 
 env:
@@ -70,15 +70,15 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-targets -- -D warnings
 
-  # # Verify documentation builds correctly
-  # doc:
-  #   name: Documentation
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: dtolnay/rust-toolchain@stable
-  #     - uses: Swatinem/rust-cache@v2
-  #     - run: cargo doc --no-deps
+  # Verify documentation builds correctly
+  doc:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --no-deps
 
   build:
     name: Build

@@ -6,12 +6,12 @@ use axum::{
 };
 use tokio::sync::mpsc;
 
-use crate::db::DbOperations;
-use crate::middleware::validate_bearer_token;
-use crate::services::IngestService;
-use crate::state::AppState;
+use crate::{
+    db::operations::batch_insert_stast, middleware::validate_bearer_token,
+    services::parsing::parse_gzipped_jsonl, state::AppState,
+};
 
-pub async fn ingest(
+pub async fn ingest_stast(
     State(state): State<AppState>,
     headers: HeaderMap,
     body: Body,
@@ -22,8 +22,8 @@ pub async fn ingest(
 
     let (tx, rx) = mpsc::channel(1000);
 
-    let parser = IngestService::parse_gzipped_ndjson(body, tx);
-    let inserter = DbOperations::batch_insert_from_channel(rx, &state.db);
+    let parser = parse_gzipped_jsonl(body, tx);
+    let inserter = batch_insert_stast(rx, &state.db);
 
     if let Err(e) = tokio::try_join!(parser, inserter) {
         return e.into_response();

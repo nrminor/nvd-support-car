@@ -17,10 +17,20 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
+    /// Creates a new `AppConfig` by reading from environment variables.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if required environment variables are missing or invalid.
     pub fn new_from_env() -> Result<Self, envy::Error> {
         envy::from_env()
     }
 
+    /// Loads TLS configuration from certificate and key files.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if certificate or key files cannot be read or parsed.
     #[allow(dead_code)]
     pub fn load_tls_config(&self) -> Result<ServerConfig> {
         let cert_file = std::fs::File::open(&self.cert_path)?;

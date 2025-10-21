@@ -113,8 +113,7 @@ fn check_macos_storage_type() -> bool {
             if line.contains("Media Type") && line.contains("SSD") {
                 return true;
             }
-            if line.contains("Protocol")
-                && (line.contains("PCI-Express") || line.contains("NVMe"))
+            if line.contains("Protocol") && (line.contains("PCI-Express") || line.contains("NVMe"))
             {
                 return true;
             }

@@ -7,6 +7,7 @@ pub struct AppState {
 }
 
 impl AppState {
+    #[must_use]
     pub fn new(db: sqlx::PgPool, config: &AppConfig) -> Self {
         AppState {
             db,

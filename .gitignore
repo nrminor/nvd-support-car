@@ -34,6 +34,7 @@
 !/src/
 !/src/*.rs
 !/src/main.rs
+!/src/lib.rs
 !/src/config.rs
 !/src/state.rs
 !/src/error.rs
@@ -49,7 +50,7 @@
 !/src/services/
 !/src/services/*.rs
 !/src/services/mod.rs
-!/src/services/ingest.rs
+!/src/services/parsing.rs
 
 # Database subdirectory
 !/src/db/
@@ -68,7 +69,9 @@
 !/src/handlers/*.rs
 !/src/handlers/mod.rs
 !/src/handlers/health.rs
-!/src/handlers/ingest.rs
+!/src/handlers/dummy.rs
+!/src/handlers/gottcha2.rs
+!/src/handlers/stast.rs
 
 # Migrations
 !/migrations/
@@ -87,3 +90,13 @@
 # Build and cargo configuration
 !/.cargo/
 !/.cargo/config.toml
+
+# Tests
+!/tests/
+!/tests/**/*.rs
+!/tests/integration_test.rs
+!/tests/common/
+!/tests/common/mod.rs
+
+# Test data files - NOT included (too large)
+tests/data/

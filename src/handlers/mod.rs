@@ -1,5 +1,9 @@
+pub mod dummy;
+pub mod gottcha2;
 pub mod health;
-pub mod ingest;
+pub mod stast;
 
+pub use dummy::ingest_dummy;
+pub use gottcha2::ingest_gottcha2;
 pub use health::healthz;
-pub use ingest::ingest;
+pub use stast::ingest_stast;
