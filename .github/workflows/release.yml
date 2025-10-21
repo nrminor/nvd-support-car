@@ -38,139 +38,177 @@ jobs:
               --notes "## Release ${{ github.ref_name }}"
           fi
 
-  build-release:
-    name: Build Release
+  build-linux:
+    name: Build Linux Targets
     needs: create-release
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     permissions:
-      contents: write 
-    strategy:
-      matrix:
-        include:
-          # Linux x86_64
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            archive: tar.gz
-            features: ""
-            rustflags: ""
-            suffix: ""
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            archive: tar.gz
-            features: ""
-            rustflags: ""
-            suffix: ""
-          
-          # Linux ARM64
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            archive: tar.gz
-            features: ""
-            rustflags: ""
-            suffix: ""
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-musl
-            archive: tar.gz
-            features: ""
-            rustflags: ""
-            suffix: ""
-          
-          # macOS Intel
-          - os: macos-13  # Intel runner
-            target: x86_64-apple-darwin
-            archive: tar.gz
-            features: ""
-            rustflags: ""
-            suffix: ""
-          
-          
-          # macOS ARM64
-          - os: macos-latest  # M1 runner
-            target: aarch64-apple-darwin
-            archive: tar.gz
-            features: ""
-            rustflags: ""
-            suffix: ""
-          
-          # Windows x86_64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            archive: zip
-            features: ""
-            rustflags: ""
-            suffix: ""
-          
-          # Windows ARM64
-          - os: windows-latest
-            target: aarch64-pc-windows-msvc
-            archive: zip
-            features: ""
-            rustflags: ""
-            suffix: ""
-
+      contents: write
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust (stable for standard builds)
-        if: matrix.features == ''
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: x86_64-unknown-linux-gnu, x86_64-unknown-linux-musl, aarch64-unknown-linux-gnu, aarch64-unknown-linux-musl
       
-      - name: Setup uv
-        if: matrix.os == 'ubuntu-latest'
+      - name: Setup uv and cargo-zigbuild
         uses: astral-sh/setup-uv@v3
       
       - name: Install cargo-zigbuild
-        if: matrix.os == 'ubuntu-latest'
         run: |
           uv venv
           source .venv/bin/activate
           uv pip install ziglang
           cargo install --locked cargo-zigbuild
       
-      - name: Build with cargo-zigbuild (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Build all Linux targets
         run: |
           source .venv/bin/activate
-          cargo zigbuild --release --target ${{ matrix.target }}
-        env:
-          RUSTFLAGS: ${{ matrix.rustflags }}
+          
+          # Build each Linux target
+          echo "Building x86_64-unknown-linux-gnu..."
+          cargo zigbuild --release --target x86_64-unknown-linux-gnu
+          
+          echo "Building x86_64-unknown-linux-musl..."
+          cargo zigbuild --release --target x86_64-unknown-linux-musl
+          
+          echo "Building aarch64-unknown-linux-gnu..."
+          cargo zigbuild --release --target aarch64-unknown-linux-gnu
+          
+          echo "Building aarch64-unknown-linux-musl..."
+          cargo zigbuild --release --target aarch64-unknown-linux-musl
       
-      - name: Build with cargo (macOS)
-        if: matrix.os != 'ubuntu-latest' && matrix.os != 'windows-latest'
+      - name: Package all Linux binaries
         run: |
-          cargo build --release --target ${{ matrix.target }}
-        env:
-          RUSTFLAGS: ${{ matrix.rustflags }}
+          # Package each built target
+          for target in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-unknown-linux-musl; do
+            echo "Packaging $target..."
+            cd target/$target/release
+            tar czf ../../../nvd-support-car-$target.tar.gz nvd-support-car
+            cd ../../../
+          done
+          
+          # List all packages
+          ls -la *.tar.gz
       
-      - name: Build with cargo (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Upload Linux Release Assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Upload all Linux packages
+          for file in nvd-support-car-*.tar.gz; do
+            echo "Uploading $file..."
+            gh release upload "${{ github.ref_name }}" "$file" --clobber
+          done
+
+  build-macos-intel:
+    name: Build macOS Intel
+    needs: create-release
+    runs-on: macos-13  # Intel runner
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+      
+      - name: Build macOS Intel
+        run: cargo build --release --target x86_64-apple-darwin
+      
+      - name: Package macOS Intel
+        run: |
+          cd target/x86_64-apple-darwin/release
+          tar czf ../../../nvd-support-car-x86_64-apple-darwin.tar.gz nvd-support-car
+      
+      - name: Upload macOS Intel Release Asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            "nvd-support-car-x86_64-apple-darwin.tar.gz" \
+            --clobber
+
+  build-macos-arm:
+    name: Build macOS ARM
+    needs: create-release
+    runs-on: macos-latest  # ARM runner
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      
+      - name: Build macOS ARM
+        run: cargo build --release --target aarch64-apple-darwin
+      
+      - name: Package macOS ARM
+        run: |
+          cd target/aarch64-apple-darwin/release
+          tar czf ../../../nvd-support-car-aarch64-apple-darwin.tar.gz nvd-support-car
+      
+      - name: Upload macOS ARM Release Asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            "nvd-support-car-aarch64-apple-darwin.tar.gz" \
+            --clobber
+
+  build-windows:
+    name: Build Windows Targets
+    needs: create-release
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc, aarch64-pc-windows-msvc
+      
+      - name: Build Windows x86_64
+        shell: pwsh
+        run: cargo build --release --target x86_64-pc-windows-msvc
+      
+      - name: Build Windows ARM64
+        shell: pwsh
+        run: cargo build --release --target aarch64-pc-windows-msvc
+      
+      - name: Package Windows binaries
         shell: pwsh
         run: |
-          cargo build --release --target "${{ matrix.target }}"
-        env:
-          RUSTFLAGS: ${{ matrix.rustflags }}
+          # Package x86_64
+          Write-Host "Packaging x86_64-pc-windows-msvc..."
+          cd target/x86_64-pc-windows-msvc/release
+          Compress-Archive -Path nvd-support-car.exe -DestinationPath ../../../nvd-support-car-x86_64-pc-windows-msvc.zip
+          cd ../../../
+          
+          # Package ARM64
+          Write-Host "Packaging aarch64-pc-windows-msvc..."
+          cd target/aarch64-pc-windows-msvc/release
+          Compress-Archive -Path nvd-support-car.exe -DestinationPath ../../../nvd-support-car-aarch64-pc-windows-msvc.zip
+          cd ../../../
+          
+          # List packages
+          Get-ChildItem *.zip
       
-      - name: Package (Unix)
-        if: matrix.os != 'windows-latest'
-        run: |
-          cd target/${{ matrix.target }}/release
-          tar czf nvd-support-car-${{ matrix.target }}${{ matrix.suffix }}.tar.gz nvd-support-car
-          mv nvd-support-car-${{ matrix.target }}${{ matrix.suffix }}.tar.gz ../../../
-      
-      - name: Package (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          cd target/${{ matrix.target }}/release
-          Compress-Archive -Path nvd-support-car.exe -DestinationPath ../../../nvd-support-car-${{ matrix.target }}${{ matrix.suffix }}.zip
-      
-      - name: Upload Release Asset
+      - name: Upload Windows Release Assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          gh release upload "${{ github.ref_name }}" \
-            "./nvd-support-car-${{ matrix.target }}${{ matrix.suffix }}.${{ matrix.archive }}" \
-            --clobber
+          # Upload all Windows packages
+          for file in nvd-support-car-*.zip; do
+            echo "Uploading $file..."
+            gh release upload "${{ github.ref_name }}" "$file" --clobber
+          done
