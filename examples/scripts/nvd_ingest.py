@@ -33,6 +33,7 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NoReturn
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
@@ -40,7 +41,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class Gottcha2Record(BaseModel):
     """GOTTCHA2 taxonomic abundance record"""
-    
+
     model_config = ConfigDict(populate_by_name=True)
 
     sample_id: str
@@ -83,7 +84,7 @@ class IngestionClient:
     timeout: float = 30.0
     verify_ssl: bool = True
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize HTTP client with configured settings"""
         self.client = httpx.Client(
             timeout=self.timeout,
@@ -130,7 +131,7 @@ class IngestionClient:
             print(f"Error sending data: {e}", file=sys.stderr)
             return False
 
-    def close(self):
+    def close(self) -> None:
         """Close the HTTP client connection"""
         self.client.close()
 
@@ -223,7 +224,7 @@ def parse_stast_tsv(filepath: Path, sample_id: str, task: str) -> list[StastReco
     return records
 
 
-def gottcha2_cmd(args, client):
+def gottcha2_cmd(args: argparse.Namespace, client: IngestionClient) -> None:
     """Ingest GOTTCHA2 taxonomic abundance data"""
     print(f"Parsing GOTTCHA2 data from {args.input}")
     records = parse_gottcha2_tsv(args.input, args.sample_id)
@@ -247,7 +248,7 @@ def gottcha2_cmd(args, client):
     print("All records successfully ingested")
 
 
-def stast_cmd(args, client):
+def stast_cmd(args: argparse.Namespace, client: IngestionClient) -> None:
     """Ingest STAST BLAST results"""
     print(f"Parsing STAST data from {args.input}")
     records = parse_stast_tsv(args.input, args.sample_id, args.task)
@@ -271,7 +272,7 @@ def stast_cmd(args, client):
     print("All records successfully ingested")
 
 
-def healthz_cmd(args, client):
+def healthz_cmd(args: argparse.Namespace, client: IngestionClient) -> None:
     """Check service health"""
     try:
         response = client.client.get(f"{client.base_url}/healthz")
@@ -284,13 +285,13 @@ def healthz_cmd(args, client):
         client.close()
 
 
-def main():
+def main() -> None:
     """Main CLI entry point"""
     parser = argparse.ArgumentParser(
         description="NVD Support Car ingestion client",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    
+
     # Global options
     parser.add_argument(
         "--url",
@@ -308,23 +309,25 @@ def main():
         action="store_true",
         help="Disable SSL certificate verification",
     )
-    
+
     # Subcommands
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
-    
+
     # GOTTCHA2 command
     gottcha2_parser = subparsers.add_parser(
         "gottcha2",
         help="Ingest GOTTCHA2 taxonomic abundance data",
     )
     gottcha2_parser.add_argument(
-        "--input", "-i",
+        "--input",
+        "-i",
         type=Path,
         required=True,
         help="GOTTCHA2 TSV file",
     )
     gottcha2_parser.add_argument(
-        "--sample-id", "-s",
+        "--sample-id",
+        "-s",
         required=True,
         help="Sample identifier",
     )
@@ -334,25 +337,28 @@ def main():
         default=1000,
         help="Records per batch (default: 1000)",
     )
-    
+
     # STAST command
     stast_parser = subparsers.add_parser(
         "stast",
         help="Ingest STAST BLAST results",
     )
     stast_parser.add_argument(
-        "--input", "-i",
+        "--input",
+        "-i",
         type=Path,
         required=True,
         help="STAST BLAST output file",
     )
     stast_parser.add_argument(
-        "--sample-id", "-s",
+        "--sample-id",
+        "-s",
         required=True,
         help="Sample identifier",
     )
     stast_parser.add_argument(
-        "--task", "-t",
+        "--task",
+        "-t",
         default="megablast",
         help="BLAST task type (e.g., megablast, blastn) (default: megablast)",
     )
@@ -362,33 +368,36 @@ def main():
         default=1000,
         help="Records per batch (default: 1000)",
     )
-    
+
     # Health check command
     healthz_parser = subparsers.add_parser(
         "healthz",
         help="Check service health",
     )
-    
+
     # Parse arguments
     args = parser.parse_args()
-    
+
     # Check if command was specified
     if not args.command:
         parser.print_help()
         sys.exit(1)
-    
+
     # Check required token
     if not args.token:
-        print("Error: Bearer token is required (use --token or set NVD_BEARER_TOKEN env var)", file=sys.stderr)
+        print(
+            "Error: Bearer token is required (use --token or set NVD_BEARER_TOKEN env var)",
+            file=sys.stderr,
+        )
         sys.exit(1)
-    
+
     # Create client
     client = IngestionClient(
         base_url=args.url.rstrip("/"),
         bearer_token=args.token,
         verify_ssl=not args.no_verify_ssl,
     )
-    
+
     # Execute command
     if args.command == "gottcha2":
         gottcha2_cmd(args, client)
