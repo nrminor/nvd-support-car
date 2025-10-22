@@ -107,6 +107,14 @@
 # Examples
 !/examples/
 !/examples/.env.example
+!/examples/scripts
+/examples/scripts/*
+!/examples/scripts/README.md
+!/examples/scripts/*.ts
+!/examples/scripts/*.py
+!/examples/scripts/*.r
+!/examples/scripts/*.R
+!/examples/scripts/*.sh
 
 # Test data files - NOT included (too large)
 tests/data/
