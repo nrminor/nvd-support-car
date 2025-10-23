@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  workflow_dispatch:  # Only run manually via GitHub UI
+  workflow_dispatch:
   push:
     branches: [ main ]
     paths:
@@ -26,6 +26,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
   check:
@@ -37,18 +38,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --all-targets
 
-  test:
-    name: Test Suite
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test --all
-      
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
@@ -70,7 +59,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-targets -- -D warnings
 
-  # Verify documentation builds correctly
   doc:
     name: Documentation
     runs-on: ubuntu-latest
@@ -79,6 +67,68 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --no-deps
+
+  test-unit:
+    name: Fast Unit Tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.os }}-unit
+      
+      - name: Run lib unit tests
+        run: cargo test --lib
+      
+      - name: Run fast integration tests (mock-based)
+        run: cargo test --test integration_test
+        timeout-minutes: 5
+
+  test-integration-db:
+    name: Database Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ubuntu-integration
+      
+      - name: Verify Docker
+        run: |
+          docker --version
+          docker info
+      
+      - name: Run database integration tests
+        run: cargo test --test integration_db_test
+        timeout-minutes: 10
+        env:
+          RUST_LOG: info
+
+  test-e2e:
+    name: Full E2E Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ubuntu-e2e
+      
+      - name: Verify Docker
+        run: |
+          docker --version
+          docker info
+      
+      - name: Run end-to-end tests
+        run: cargo test --test e2e_test -- --test-threads=1
+        timeout-minutes: 15
+        env:
+          RUST_LOG: info
 
   build:
     name: Build

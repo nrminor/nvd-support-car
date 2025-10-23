@@ -39,6 +39,7 @@ wget -qO- https://raw.githubusercontent.com/nrminor/nvd-support-car/main/INSTALL
 ```
 
 The installer will:
+
 1. Download a pre-built binary for your platform (if available)
 2. Fall back to building from source if no binary is available
 3. Install to `~/.local/bin`
@@ -69,7 +70,8 @@ psql -U postgres -d nvd_support -f migrations/003_stast_table.sql
 
 ## Configuration
 
-All configuration is managed through environment variables. See [examples/.env.example](examples/.env.example) for a complete template.
+All configuration is managed through environment variables. See
+[examples/.env.example](examples/.env.example) for a complete template.
 
 ```bash
 export DATABASE_URL="postgresql://user:password@localhost/nvd_support"
@@ -178,7 +180,7 @@ To add a new data ingestion endpoint within this framework, follow these steps:
      -- ... your fields
      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
    );
-   
+
    CREATE INDEX IF NOT EXISTS idx_your_table_field1 ON your_table(field1);
    ```
 
@@ -232,7 +234,7 @@ To add a new data ingestion endpoint within this framework, follow these steps:
        services::parsing::parse_gzipped_jsonl,
        state::AppState,
    };
-   
+
    pub async fn ingest_your_type(
        State(state): State<AppState>,
        headers: HeaderMap,
@@ -241,30 +243,146 @@ To add a new data ingestion endpoint within this framework, follow these steps:
        if let Err(e) = validate_bearer_token(&state, &headers) {
            return e.into_response();
        }
-   
+
        let (tx, rx) = mpsc::channel(1000);
        let parser = parse_gzipped_jsonl(body, tx);
        let inserter = batch_insert_your_type(rx, &state.db);
-   
+
        if let Err(e) = tokio::try_join!(parser, inserter) {
            return e.into_response();
        }
-   
+
        (StatusCode::OK, "ingested").into_response()
    }
    ```
 
 6. **Wire it up**:
-   - Export handler in `src/handlers/mod.rs`: `pub use your_type::ingest_your_type;`
-   - Add route in `src/main.rs`: `.route("/ingest-your-type", post(ingest_your_type))`
+   - Export handler in `src/handlers/mod.rs`:
+     `pub use your_type::ingest_your_type;`
+   - Add route in `src/main.rs`:
+     `.route("/ingest-your-type", post(ingest_your_type))`
 
-The generic infrastructure handles all parsing, batching, and bulk SQL operations automatically.
+The generic infrastructure handles all parsing, batching, and bulk SQL
+operations automatically.
 
 ### Testing
 
-```bash
-cargo check
-cargo test
-cargo fmt
-cargo clippy
+NVD Support Car uses a comprehensive three-tier testing strategy with 63 tests
+covering unit, integration, and end-to-end scenarios.
+
+#### Test Pyramid
+
 ```
+        ▲
+       /E2\      22 E2E Tests (~8s)
+      /────\     Full stack: TLS + PostgreSQL + HTTP
+     / Int  \    20 Integration Tests (~8s)  
+    /  DB    \   Real PostgreSQL via testcontainers
+   /───────── \  
+  /  Unit      \ 21 Unit Tests (~9s)
+ /   Tests      \ Fast, mock-based validation
+/────────────────\
+  Total: 63 tests (~25s)
+```
+
+#### Quick Start (No Docker)
+
+Run fast unit tests with mock handlers:
+
+```bash
+# Using cargo
+cargo test --lib
+cargo test --test integration_test
+
+# Using justfile
+just test-unit
+```
+
+**Run time**: ~9 seconds\
+**Requirements**: None (though infrastructure tests use testcontainers)
+
+#### Full Test Suite (Docker Required)
+
+```bash
+# Run all tests
+cargo test
+
+# Or run test tiers separately
+just test-unit          # Fast unit tests (~9s)
+just test-integration   # Database integration (~8s)
+just test-e2e          # Full E2E with TLS (~8s)
+just test-all          # All tiers in sequence (~25s)
+```
+
+#### What's Tested
+
+**Unit Tests** (`tests/integration_test.rs`):
+
+- Health check endpoint
+- Authentication (missing/invalid tokens)
+- Data validation (malformed gzip, invalid JSON)
+- Certificate generation
+- Database helpers
+- Server lifecycle
+
+**Integration Tests** (`tests/integration_db_test.rs`):
+
+- Batch insert for GOTTCHA2 records
+- Batch insert for STAST records
+- Concurrent database operations (10 parallel)
+- Large dataset handling (1,000 records)
+- Data integrity validation
+- Table cleanup
+
+**E2E Tests** (`tests/e2e_test.rs`):
+
+- GOTTCHA2 ingestion over HTTPS
+- STAST ingestion over HTTPS
+- Authentication over TLS
+- Concurrent client requests (10 parallel)
+- TLS certificate validation
+- Error handling (malformed data, empty payloads)
+- Large payload handling (100 records)
+
+#### Docker Requirement
+
+Integration and E2E tests use [testcontainers](https://testcontainers.com/) to
+spin up PostgreSQL containers automatically. Docker must be running:
+
+```bash
+# Check Docker is running
+docker ps
+
+# Start Docker if needed
+# macOS: Open Docker Desktop
+# Linux: sudo systemctl start docker
+```
+
+GitHub Actions CI handles Docker automatically - no manual setup required for
+PRs.
+
+#### Code Quality
+
+```bash
+cargo fmt              # Format code
+cargo clippy           # Lint with strict rules
+just check             # Format + clippy + test
+```
+
+#### Troubleshooting
+
+**Port conflicts**: E2E tests use OS-assigned ports. Run sequentially if needed:
+
+```bash
+cargo test --test e2e_test -- --test-threads=1
+```
+
+**Leftover containers**: Tests clean up automatically, but if interrupted:
+
+```bash
+docker ps -a | grep postgres
+docker rm -f $(docker ps -a -q --filter ancestor=postgres:16-alpine)
+```
+
+**Performance**: E2E tests are slower (~8s) due to TLS handshakes and container
+startup. Use `just test-unit` for fast iteration during development.

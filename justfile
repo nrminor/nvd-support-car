@@ -44,6 +44,30 @@ test:
 
 alias t := test
 
+# Run only fast unit tests (no Docker required)
+[group('test')]
+test-unit:
+    @echo "Running fast unit tests..."
+    cargo test --lib
+    cargo test --test integration_test
+
+# Run database integration tests (Docker required)
+[group('test')]
+test-integration:
+    @echo "Running database integration tests..."
+    cargo test --test integration_db_test
+
+# Run full end-to-end tests with TLS (Docker required, sequential)
+[group('test')]
+test-e2e:
+    @echo "Running end-to-end tests..."
+    cargo test --test e2e_test -- --test-threads=1
+
+# Run all test suites in sequence
+[group('test')]
+test-all: test-unit test-integration test-e2e
+    @echo "✓ All test suites passed!"
+
 # Run clippy with strict lints (deny all warnings)
 [group('lint')]
 clippy:

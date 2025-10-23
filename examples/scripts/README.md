@@ -1,16 +1,21 @@
 # NVD Support Car Client Scripts
 
-This directory contains client scripts for interacting with the NVD Support Car
-service from various programming environments. These scripts are designed to be
-used as standalone tools or integrated into bioinformatics pipelines,
-particularly Nextflow workflows.
+This directory contains scripts in a few common languages that can act as
+clients for interacting with the NVD Support Car service. Each script can be
+used on its own given the required dependencies (see below) and are meant to
+demonstrate how a Nextflow or Snakemake pipeline might parallelize networked API
+calls on an HPC cluster. As an example, any one of these scripts can be placed
+in a Nextflow `bin/` directory, made executable, and used as-is. All other
+configuration takes place through environment variables.
 
 ## Overview
 
 The NVD Support Car service accepts gzipped JSONL data containing metagenomic
-analysis results. These client scripts handle the conversion from standard TSV
-formats produced by GOTTCHA2 and STAST tools to the required JSONL format,
-compression, and authenticated transmission to the service.
+analysis results from GOTTCHA2 or NVD's STAT+BLAST ("STAST") subworkflow. Each
+client script handles the conversion from standard TSV formats produced by
+GOTTCHA2 and STAST tools to the required compressed
+[NDJSON/JSONL](https://jsonltools.com/jsonl-vs-ndjson) format. Upon successful
+conversion, they also handle authentication transmission to the support car.
 
 Each script provides the same core functionality but is tailored for different
 runtime environments and dependency requirements. Choose the script that best
@@ -21,16 +26,19 @@ fits your computational environment and existing toolchain.
 ### Python Client (nvd_ingest.py)
 
 The Python client uses modern Python features including PEP 723 inline script
-metadata for dependency management. This allows the script to be run with uv
+metadata for dependency management.
+[This allows the script to be run with uv](https://docs.astral.sh/uv/guides/scripts/#declaring-script-dependencies)
 without requiring manual dependency installation or virtual environment
-management. The script provides a full-featured command-line interface using
-Python's built-in argparse module and handles HTTP communication with httpx.
+management. The script provides a subcommand-based command-line interface using
+Python's argparse module and handles HTTP communication with
+[httpx](https://www.python-httpx.org/).
 
 The Python client is ideal for environments where Python is the primary language
 for data processing and analysis. It integrates well with other Python-based
 bioinformatics tools and can be easily extended with additional functionality.
-The use of Pydantic for data validation ensures that records conform to the
-expected schema before transmission.
+The script also uses [Pydantic](https://docs.pydantic.dev/latest/) for data
+validation and serialization to JSON and thus ensures that records conform to
+the expected schema before transmission.
 
 To use the Python client with uv, simply run it directly and uv will handle all
 dependencies automatically. The script includes comprehensive error handling and
@@ -39,11 +47,11 @@ pipelines.
 
 ### TypeScript/Bun Client (nvd_ingest.ts)
 
-The TypeScript client is designed to run with Bun, a fast JavaScript runtime
-that includes built-in TypeScript support. Bun provides excellent startup
-performance and eliminates the need for a separate compilation step, making it
-well-suited for use in pipeline environments where scripts are invoked
-frequently.
+The TypeScript client is designed to run with [Bun](https://bun.com/), a fast
+JavaScript runtime that includes built-in TypeScript support. Bun provides
+excellent startup performance and eliminates the need for a separate compilation
+step, making it well-suited for use in pipeline environments where scripts are
+invoked frequently.
 
 This client leverages TypeScript's type system to ensure data consistency and
 provides clear interfaces for the GOTTCHA2 and STAST record formats. The script
@@ -54,14 +62,16 @@ memory.
 The TypeScript client is particularly useful in environments where
 JavaScript/TypeScript is already in use, or where the fast startup time of Bun
 is advantageous. It requires only Bun to be installed, with no additional
-dependencies needed at runtime.
+dependencies needed at runtime. And if that's too much to ask, it can also be
+[compiled into standalone dependency-free executables](https://bun.com/docs/bundler/executables)
+with `bun build --compile`
 
 ### R Client (nvd_ingest.R)
 
-The R client is designed for integration with R-based bioinformatics workflows.
-It uses standard R packages that are commonly available in bioinformatics
-computing environments: httr for HTTP communication, jsonlite for JSON handling,
-and optparse for command-line argument parsing.
+We also provide an R client for folks partial to more R-based bioinformatics
+workflows. It uses standard R packages that are commonly available in
+bioinformatics computing environments: httr for HTTP communication, jsonlite for
+JSON handling, and optparse for command-line argument parsing.
 
 The script follows R conventions and uses reference classes to encapsulate the
 client functionality. It handles data frames naturally, making it easy to
@@ -69,10 +79,10 @@ integrate with other R-based data processing steps. The batch processing
 functionality ensures that large datasets can be transmitted without memory
 issues.
 
-The R client is ideal for researchers who are already working in R for their
+Use the R client if you're a researcher already working in R for your
 statistical analyses and want to directly upload results without switching to
-another language. It can be sourced from other R scripts or run as a standalone
-command-line tool.
+another language. Like the other scripts here, the R client can be sourced from
+other R scripts or run as a standalone command-line tool.
 
 ### Shell Client (nvd_ingest.sh)
 

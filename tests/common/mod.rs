@@ -1,3 +1,7 @@
+pub mod certificates;
+pub mod database;
+pub mod server;
+
 use async_compression::tokio::bufread::GzipDecoder;
 use axum::{
     Router,
@@ -10,9 +14,10 @@ use futures_util::StreamExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_util::io::StreamReader;
 
+#[allow(dead_code)]
 pub const TEST_TOKEN: &str = "test_secret_token_12345";
 
-// Mock handlers for testing without database or state
+#[allow(dead_code)]
 async fn mock_ingest_handler(headers: axum::http::HeaderMap, body: Body) -> impl IntoResponse {
     // Check authorization first
     if let Some(auth) = headers.get("Authorization") {
@@ -52,10 +57,12 @@ async fn mock_ingest_handler(headers: axum::http::HeaderMap, body: Body) -> impl
     }
 }
 
+#[allow(dead_code)]
 async fn mock_healthz() -> impl IntoResponse {
     "ok"
 }
 
+#[allow(dead_code)]
 pub fn create_test_app() -> Router {
     // Build the router with mock handlers - no state needed for these simple mocks
     Router::new()
