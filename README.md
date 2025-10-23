@@ -267,22 +267,22 @@ operations automatically.
 
 ### Testing
 
-NVD Support Car uses a comprehensive three-tier testing strategy with 63 tests
+NVD Support Car uses a comprehensive three-tier testing strategy with 41 tests
 covering unit, integration, and end-to-end scenarios.
 
 #### Test Pyramid
 
 ```
         ▲
-       /E2\      22 E2E Tests (~8s)
+       /E2\      17 E2E Tests (~7s)
       /────\     Full stack: TLS + PostgreSQL + HTTP
-     / Int  \    20 Integration Tests (~8s)  
+     / Int  \    14 Integration Tests (~7s)  
     /  DB    \   Real PostgreSQL via testcontainers
    /───────── \  
-  /  Unit      \ 21 Unit Tests (~9s)
- /   Tests      \ Fast, mock-based validation
+  /  Unit      \ 10 Unit Tests (<1s)
+ /   Tests      \ Fast, no Docker required
 /────────────────\
-  Total: 63 tests (~25s)
+  Total: 41 tests (~15s)
 ```
 
 #### Quick Start (No Docker)
@@ -298,8 +298,8 @@ cargo test --test integration_test
 just test-unit
 ```
 
-**Run time**: ~9 seconds\
-**Requirements**: None (though infrastructure tests use testcontainers)
+**Run time**: <1 second  
+**Requirements**: None - no Docker needed!
 
 #### Full Test Suite (Docker Required)
 
@@ -316,16 +316,15 @@ just test-all          # All tiers in sequence (~25s)
 
 #### What's Tested
 
-**Unit Tests** (`tests/integration_test.rs`):
+**Unit Tests** (`tests/integration_test.rs`) - 10 tests, no Docker:
 
 - Health check endpoint
 - Authentication (missing/invalid tokens)
 - Data validation (malformed gzip, invalid JSON)
-- Certificate generation
-- Database helpers
-- Server lifecycle
+- GOTTCHA2/STAST endpoints with mock data
+- Certificate generation (3 infrastructure tests)
 
-**Integration Tests** (`tests/integration_db_test.rs`):
+**Integration Tests** (`tests/integration_db_test.rs`) - 14 tests, Docker required:
 
 - Batch insert for GOTTCHA2 records
 - Batch insert for STAST records
@@ -333,8 +332,9 @@ just test-all          # All tiers in sequence (~25s)
 - Large dataset handling (1,000 records)
 - Data integrity validation
 - Table cleanup
+- Database infrastructure (5 tests: creation, migrations, count helpers, cleanup)
 
-**E2E Tests** (`tests/e2e_test.rs`):
+**E2E Tests** (`tests/e2e_test.rs`) - 17 tests, Docker required:
 
 - GOTTCHA2 ingestion over HTTPS
 - STAST ingestion over HTTPS
@@ -343,6 +343,7 @@ just test-all          # All tiers in sequence (~25s)
 - TLS certificate validation
 - Error handling (malformed data, empty payloads)
 - Large payload handling (100 records)
+- Server infrastructure (6 tests: startup, health check, TLS handshake, lifecycle, parallel servers, cert validation)
 
 #### Docker Requirement
 
@@ -384,5 +385,6 @@ docker ps -a | grep postgres
 docker rm -f $(docker ps -a -q --filter ancestor=postgres:16-alpine)
 ```
 
-**Performance**: E2E tests are slower (~8s) due to TLS handshakes and container
-startup. Use `just test-unit` for fast iteration during development.
+**Performance**: Unit tests are now Docker-free and finish in <1s! Integration and
+E2E tests take ~7s each due to testcontainer startup. Use `just test-unit` for
+fast iteration during development.
