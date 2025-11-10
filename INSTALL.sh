@@ -1,24 +1,72 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# nvd-support-car installation script
-# This script attempts to download a pre-built binary from GitHub releases,
-# falling back to building from source if necessary.
+# ============================================================================
+# NVD Support Car Installation Script
+# ============================================================================
+# A dependency-free backend service for ingesting metagenomic data from
+# HTCondor nodes. Handles TLS termination, bearer token authentication,
+# rate limiting, and database operations for NVD workflows.
+#
+# Repository: https://github.com/nrminor/nvd-support-car
+# License: MIT
+# ============================================================================
 
 REPO="nrminor/nvd-support-car"
 BINARY_NAME="nvd-support-car"
-INSTALL_DIR="${HOME}/.local/bin"
+VERSION="0.1.0"
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # Helper functions
 info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
+step() { echo -e "${BLUE}[STEP]${NC} $1"; }
+
+# Check if we're in a conda/mamba/pixi environment
+in_conda_env() {
+	[[ -n "${CONDA_PREFIX:-}" ]]
+}
+
+# Determine installation directory based on environment
+determine_install_dir() {
+	if [[ -n "${CONDA_PREFIX:-}" ]]; then
+		# In conda/mamba/pixi environment - install to environment bin
+		echo "${CONDA_PREFIX}/bin"
+	else
+		# Global install - use XDG-compliant user bin
+		echo "${HOME}/.local/bin"
+	fi
+}
+
+# Get cargo install root (strips /bin suffix)
+get_cargo_install_root() {
+	local install_dir="$1"
+	echo "${install_dir%/bin}"
+}
+
+# Get a friendly name for the current environment type
+get_environment_name() {
+	if [[ -n "${PIXI_PROJECT_ROOT:-}" ]]; then
+		echo "pixi"
+	elif [[ -n "${CONDA_PREFIX:-}" ]]; then
+		# Could be conda or mamba, but we treat them the same
+		if [[ -n "${CONDA_DEFAULT_ENV:-}" ]]; then
+			echo "conda (${CONDA_DEFAULT_ENV})"
+		else
+			echo "conda"
+		fi
+	else
+		echo "none"
+	fi
+}
 
 # Detect OS and architecture
 detect_platform() {
@@ -75,6 +123,7 @@ get_latest_release() {
 install_binary() {
 	local version="$1"
 	local platform="$2"
+	local install_dir="$3"
 	local archive_ext="tar.gz"
 
 	if [[ "$platform" == *"windows"* ]]; then
@@ -84,7 +133,7 @@ install_binary() {
 	local download_url="https://github.com/${REPO}/releases/download/${version}/${BINARY_NAME}-${platform}.${archive_ext}"
 	local temp_dir=$(mktemp -d)
 
-	info "Downloading ${BINARY_NAME} ${version} for ${platform}..."
+	step "Downloading ${BINARY_NAME} ${version} for ${platform}..."
 
 	cd "$temp_dir"
 	if command -v curl &>/dev/null; then
@@ -93,21 +142,21 @@ install_binary() {
 		wget -q -O "archive.${archive_ext}" "$download_url" || return 1
 	fi
 
-	info "Extracting binary..."
+	step "Extracting binary..."
 	if [[ "$archive_ext" == "zip" ]]; then
 		unzip -q "archive.${archive_ext}"
 	else
 		tar -xzf "archive.${archive_ext}"
 	fi
 
-	info "Installing to ${INSTALL_DIR}..."
-	mkdir -p "$INSTALL_DIR"
+	step "Installing to ${install_dir}..."
+	mkdir -p "$install_dir"
 
 	if [[ -f "${BINARY_NAME}" ]]; then
 		chmod +x "${BINARY_NAME}"
-		mv "${BINARY_NAME}" "${INSTALL_DIR}/"
+		mv "${BINARY_NAME}" "${install_dir}/"
 	elif [[ -f "${BINARY_NAME}.exe" ]]; then
-		mv "${BINARY_NAME}.exe" "${INSTALL_DIR}/"
+		mv "${BINARY_NAME}.exe" "${install_dir}/"
 	else
 		error "Binary not found in archive"
 		return 1
@@ -116,25 +165,70 @@ install_binary() {
 	cd - >/dev/null
 	rm -rf "$temp_dir"
 
-	info "Successfully installed ${BINARY_NAME} to ${INSTALL_DIR}"
+	info "Successfully installed ${BINARY_NAME} to ${install_dir}"
 	return 0
+}
+
+# Provide helpful error when cargo is missing in conda environment
+fail_no_cargo_in_env() {
+	local env_type="$1"
+	
+	error "Cargo not found in active environment"
+	echo ""
+	
+	case "$env_type" in
+	pixi*)
+		info "Add Rust to your pixi.toml:"
+		echo "  pixi add rust"
+		echo ""
+		echo "Then re-run this installer"
+		;;
+	conda*)
+		info "Install Rust in your conda/mamba environment:"
+		echo "  conda install -c conda-forge rust"
+		echo "  # or"
+		echo "  mamba install rust"
+		echo ""
+		echo "Then re-run this installer"
+		;;
+	*)
+		info "Install Rust in your environment or globally:"
+		echo "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+		;;
+	esac
+	
+	exit 1
 }
 
 # Build from source
 build_from_source() {
-	info "Building from source..."
+	local install_dir="$1"
+	local install_root
+	install_root=$(get_cargo_install_root "$install_dir")
+	
+	step "Building from source..."
 
 	# Check for Rust
 	if ! command -v cargo &>/dev/null; then
-		warn "Rust not found. Installing Rust toolchain..."
-		curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-		export PATH="$HOME/.cargo/bin:$PATH"
+		if in_conda_env; then
+			# In conda environment - fail with helpful message
+			local env_type
+			env_type=$(get_environment_name)
+			fail_no_cargo_in_env "$env_type"
+		else
+			# Global install - auto-install rustup
+			warn "Rust not found. Installing Rust toolchain..."
+			curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+			export PATH="$HOME/.cargo/bin:$PATH"
+		fi
 	fi
 
 	info "Installing ${BINARY_NAME} from GitHub repository..."
+	info "Using cargo: $(command -v cargo)"
+	info "Install root: ${install_root}"
 	
 	# Use cargo install with --root to control installation directory
-	if cargo install --git "https://github.com/${REPO}.git" --root "${HOME}/.local" --force; then
+	if cargo install --git "https://github.com/${REPO}.git" --root "${install_root}" --force; then
 		info "Successfully built and installed ${BINARY_NAME}"
 	else
 		error "Failed to install from source"
@@ -142,17 +236,117 @@ build_from_source() {
 	fi
 }
 
+# Show help message
+show_help() {
+	echo -e "${BOLD}NVD Support Car Installer${NC} - Version ${VERSION}"
+	echo ""
+	echo -e "${BOLD}DESCRIPTION${NC}"
+	echo "    A dependency-free backend service for ingesting metagenomic data from"
+	echo "    HTCondor nodes. Provides TLS termination, bearer token authentication,"
+	echo "    rate limiting, and database operations for NVD workflows."
+	echo ""
+	echo -e "${BOLD}SYNOPSIS${NC}"
+	echo "    $0 [OPTIONS]"
+	echo ""
+	echo -e "${BOLD}OPTIONS${NC}"
+	echo "    -h, --help          Show this help message and exit"
+	echo "    -v, --version       Show version information and exit"
+	echo ""
+	echo -e "${BOLD}INSTALLATION BEHAVIOR${NC}"
+	echo "    The installer automatically detects your environment and installs to the"
+	echo "    appropriate location:"
+	echo ""
+	echo -e "    ${BOLD}Conda/Mamba/Pixi Environments:${NC}"
+	echo "        When a conda-compatible environment is active (\$CONDA_PREFIX is set),"
+	echo "        the binary will be installed to:"
+	echo "            \$CONDA_PREFIX/bin"
+	echo ""
+	echo "        This ensures the tool is isolated within your project environment and"
+	echo "        automatically available in your PATH when the environment is activated."
+	echo ""
+	echo -e "    ${BOLD}Global Installation:${NC}"
+	echo "        When no conda-compatible environment is detected, the binary will be"
+	echo "        installed to:"
+	echo "            \$HOME/.local/bin"
+	echo ""
+	echo "        You may need to add this directory to your PATH if it's not already."
+	echo ""
+	echo -e "    ${BOLD}Note:${NC} Python virtual environments (venv) are NOT detected. If you want"
+	echo "    environment-local installation, use conda/mamba/pixi instead."
+	echo ""
+	echo -e "${BOLD}INSTALLATION METHODS${NC}"
+	echo -e "    1. ${BOLD}Pre-built binary${NC} (preferred)"
+	echo "       Downloads the latest release binary for your platform from GitHub."
+	echo ""
+	echo -e "    2. ${BOLD}Build from source${NC} (fallback)"
+	echo "       If no pre-built binary is available, builds from source using cargo."
+	echo "       - In conda environments: Requires 'rust' package to be installed"
+	echo "       - Global installs: Automatically installs rustup if needed"
+	echo ""
+	echo -e "${BOLD}REQUIREMENTS${NC}"
+	echo "    Runtime:"
+	echo "        - PostgreSQL database (for data storage)"
+	echo "        - TLS certificates (optional, for HTTPS)"
+	echo ""
+	echo "    Build from source (if needed):"
+	echo "        - Rust toolchain (cargo)"
+	echo "        - Internet connection"
+	echo ""
+	echo -e "${BOLD}POST-INSTALLATION${NC}"
+	echo "    After installation, you'll need to:"
+	echo "    1. Set up a PostgreSQL database and run migrations"
+	echo "    2. Configure environment variables (DATABASE_URL, BEARER_TOKEN, etc.)"
+	echo "    3. Optionally configure TLS certificates"
+	echo ""
+	echo "    See the full documentation at: https://github.com/${REPO}"
+	echo ""
+	echo -e "${BOLD}EXAMPLES${NC}"
+	echo "    # Install in current conda environment"
+	echo "    conda activate myenv"
+	echo "    curl -fsSL https://raw.githubusercontent.com/${REPO}/main/INSTALL.sh | bash"
+	echo ""
+	echo "    # Install in pixi project"
+	echo "    cd my-pixi-project"
+	echo "    pixi shell"
+	echo "    curl -fsSL https://raw.githubusercontent.com/${REPO}/main/INSTALL.sh | bash"
+	echo ""
+	echo "    # Global installation"
+	echo "    curl -fsSL https://raw.githubusercontent.com/${REPO}/main/INSTALL.sh | bash"
+	echo ""
+	echo -e "${BOLD}AUTHOR${NC}"
+	echo "    Nicholas R. Minor <nrminor@wisc.edu>"
+	echo ""
+	echo -e "${BOLD}LICENSE${NC}"
+	echo "    MIT License - See https://github.com/${REPO}/blob/main/LICENSE"
+	echo ""
+	echo -e "${BOLD}REPORTING BUGS${NC}"
+	echo "    Report bugs at: https://github.com/${REPO}/issues"
+	echo ""
+}
+
+# Show version information
+show_version() {
+	cat <<EOF
+${BINARY_NAME} installer version ${VERSION}
+Repository: https://github.com/${REPO}
+License: MIT
+EOF
+}
+
 # Parse command line arguments
 parse_args() {
 	while [[ $# -gt 0 ]]; do
 		case $1 in
 		-h | --help)
-			echo "Usage: $0 [--help]"
-			echo "  --help    Show this help message"
+			show_help
+			exit 0
+			;;
+		-v | --version)
+			show_version
 			exit 0
 			;;
 		*)
-			warn "Unknown option: $1"
+			error "Unknown option: $1"
 			echo "Use --help for usage information"
 			exit 1
 			;;
@@ -160,65 +354,136 @@ parse_args() {
 	done
 }
 
+# Verify installation and provide feedback
+verify_installation() {
+	local install_dir="$1"
+	
+	echo ""
+	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	
+	if in_conda_env; then
+		# In conda environment - PATH is automatically managed
+		local env_type
+		env_type=$(get_environment_name)
+		info "Installed to ${env_type} environment: ${install_dir}"
+		info "Binary available as: ${BINARY_NAME}"
+	else
+		# Global install - check if in PATH
+		info "Installed globally: ${install_dir}"
+		if [[ ":$PATH:" != *":${install_dir}:"* ]]; then
+			warn "${install_dir} is not in your PATH"
+			info "Add to your shell configuration (~/.bashrc, ~/.zshrc, etc.):"
+			echo "  export PATH=\"${install_dir}:\$PATH\""
+			echo ""
+		fi
+	fi
+
+	# Try to verify binary is accessible
+	if command -v "${BINARY_NAME}" &>/dev/null; then
+		echo -e "${GREEN}${BOLD}✓ Installation successful!${NC}"
+		info "Run '${BINARY_NAME} --help' to get started"
+	else
+		if in_conda_env; then
+			info "Binary installed: ${install_dir}/${BINARY_NAME}"
+		else
+			warn "Binary installed but not found in PATH"
+			info "Run directly: ${install_dir}/${BINARY_NAME}"
+		fi
+	fi
+	
+	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+}
+
+# Show post-installation instructions
+show_next_steps() {
+	echo ""
+	echo -e "${BOLD}Next Steps:${NC}"
+	echo ""
+	echo -e "${BOLD}1. Database Setup${NC}"
+	echo "   Create and initialize the PostgreSQL database:"
+	echo ""
+	echo "   psql -U postgres -c 'CREATE DATABASE nvd_support;'"
+	echo "   psql -U postgres -d nvd_support -f migrations/001_init.sql"
+	echo "   psql -U postgres -d nvd_support -f migrations/002_gottcha2_full_table.sql"
+	echo "   psql -U postgres -d nvd_support -f migrations/003_stast_table.sql"
+	echo ""
+	echo -e "${BOLD}2. Environment Configuration${NC}"
+	echo "   Set required environment variables:"
+	echo ""
+	echo "   export DATABASE_URL=\"postgresql://user:password@localhost/nvd_support\""
+	echo "   export BEARER_TOKEN=\"your-secure-token\""
+	echo "   export HOST=\"127.0.0.1\""
+	echo "   export PORT=\"8080\""
+	echo ""
+	echo -e "   ${BOLD}Optional TLS Configuration:${NC}"
+	echo "   export CERT_PATH=\"/path/to/cert.pem\""
+	echo "   export KEY_PATH=\"/path/to/key.pem\""
+	echo ""
+	echo -e "${BOLD}3. Start the Service${NC}"
+	echo "   ${BINARY_NAME}"
+	echo ""
+	echo -e "${BOLD}For More Information:${NC}"
+	echo "   Documentation: https://github.com/${REPO}"
+	echo "   Issues: https://github.com/${REPO}/issues"
+	echo ""
+}
+
 # Main installation logic
 main() {
 	parse_args "$@"
 
-	info "Installing ${BINARY_NAME}..."
+	# Print banner
+	echo ""
+	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	echo -e "${BOLD}  NVD Support Car Installer${NC}"
+	echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	echo ""
 
-	local platform=$(detect_platform)
+	# Detect environment and determine install location
+	local install_dir
+	install_dir=$(determine_install_dir)
+	
+	if in_conda_env; then
+		local env_type
+		env_type=$(get_environment_name)
+		info "Detected environment: ${env_type}"
+		info "Environment prefix: ${CONDA_PREFIX}"
+	else
+		info "No conda environment detected (global installation)"
+	fi
+	
+	info "Install directory: ${install_dir}"
+
+	# Detect platform
+	local platform
+	platform=$(detect_platform)
 	info "Detected platform: ${platform}"
 
+	echo ""
+
 	# Try to download pre-built binary
-	local version=$(get_latest_release)
+	local version
+	version=$(get_latest_release)
+	
 	if [[ -n "$version" ]]; then
 		info "Latest release: ${version}"
-		if install_binary "$version" "$platform"; then
-			# Success
-			:
-		else
-			warn "Failed to download pre-built binary. Falling back to source build..."
-			build_from_source
+		if install_binary "$version" "$platform" "$install_dir"; then
+			verify_installation "$install_dir"
+			show_next_steps
+			return 0
 		fi
+		warn "Failed to download pre-built binary"
+		echo ""
 	else
-		warn "Could not determine latest release. Building from source..."
-		build_from_source
+		warn "Could not determine latest release"
+		echo ""
 	fi
 
-	# Add to PATH if needed
-	if [[ ":$PATH:" != *":${INSTALL_DIR}:"* ]]; then
-		warn "${INSTALL_DIR} is not in your PATH"
-		info "Add the following to your shell configuration file:"
-		echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
-	fi
-
-	# Verify installation
-	if command -v "${BINARY_NAME}" &>/dev/null; then
-		info "Installation complete! Run '${BINARY_NAME} --help' to get started."
-	else
-		warn "Installation complete, but ${BINARY_NAME} is not in PATH."
-		info "You can run it directly: ${INSTALL_DIR}/${BINARY_NAME}"
-	fi
-
-	# Post-install instructions
-	echo
-	info "Next steps:"
-	echo "  1. Set up PostgreSQL database and run migrations:"
-	echo "     psql -U postgres -c 'CREATE DATABASE nvd_support;'"
-	echo "     psql -U postgres -d nvd_support -f migrations/001_init.sql"
-	echo "     psql -U postgres -d nvd_support -f migrations/002_gottcha2_full_table.sql"
-	echo "     psql -U postgres -d nvd_support -f migrations/003_stast_table.sql"
-	echo
-	echo "  2. Configure environment variables:"
-	echo "     export DATABASE_URL=\"postgresql://user:password@localhost/nvd_support\""
-	echo "     export BEARER_TOKEN=\"your-secure-token\""
-	echo "     export HOST=\"127.0.0.1\""
-	echo "     export PORT=\"8080\""
-	echo
-	echo "  3. Run the server:"
-	echo "     ${BINARY_NAME}"
-	echo
-	echo "  For more information, see: https://github.com/${REPO}"
+	# Fall back to source build
+	warn "Falling back to source build..."
+	build_from_source "$install_dir"
+	verify_installation "$install_dir"
+	show_next_steps
 }
 
 main "$@"
